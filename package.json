@@ -5,10 +5,12 @@
     "main": "src/index.ts",
     "scripts": {
         "dev": "bun --watch src/index.ts",
+        "start": "bun src/index.ts",
         "test": "bun test"
     },
     "dependencies": {
         "elysia": "^1.4.27",
+        "posthog-node": "^5.28.2",
         "zod": "^4.3.6"
     }
 }

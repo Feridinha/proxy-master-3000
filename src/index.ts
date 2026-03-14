@@ -40,7 +40,9 @@ const handleManualProxyReport = async (
     let status: "success" | "error" | null = null;
 
     try {
-        const parsed = JSON.parse(body.toString("utf-8")) as { status?: string };
+        const parsed = JSON.parse(body.toString("utf-8")) as {
+            status?: string;
+        };
         if (parsed.status === "success" || parsed.status === "error") {
             status = parsed.status;
         }
@@ -51,7 +53,8 @@ const handleManualProxyReport = async (
     if (!status) {
         writeJson(response, 400, {
             success: false,
-            message: "Body must contain JSON with status=success or status=error",
+            message:
+                "Body must contain JSON with status=success or status=error",
         });
         return;
     }
@@ -76,16 +79,20 @@ const handleLocalRoute = async (
     response: ServerResponse,
 ): Promise<boolean> => {
     const rawUrl = request.url ?? "/";
-    const url = new URL(rawUrl, `http://${request.headers.host ?? "localhost"}`);
+    const url = new URL(
+        rawUrl,
+        `http://${request.headers.host ?? "localhost"}`,
+    );
 
     if (request.method === "GET" && url.pathname === "/") {
         handleRoot(request, response);
         return true;
     }
 
-    const reportMatch = request.method === "POST"
-        ? url.pathname.match(/^\/proxy\/(.+)$/)
-        : null;
+    const reportMatch =
+        request.method === "POST"
+            ? url.pathname.match(/^\/proxy\/(.+)$/)
+            : null;
 
     if (reportMatch) {
         await handleManualProxyReport(
@@ -113,7 +120,11 @@ const handleProxyRequest = async (
     }
 
     try {
-        const upstreamStatus = await forwardHttpRequestViaProxy(proxy, request, response);
+        const upstreamStatus = await forwardHttpRequestViaProxy(
+            proxy,
+            request,
+            response,
+        );
 
         if (upstreamStatus === 407) {
             reportProxyStatus(proxy.id, "error");
@@ -127,7 +138,10 @@ const handleProxyRequest = async (
         if (!response.headersSent) {
             writeJson(response, 502, {
                 success: false,
-                message: error instanceof Error ? error.message : "Proxy request failed",
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : "Proxy request failed",
                 proxyId: proxy.id,
             });
             return;
@@ -225,7 +239,8 @@ const server = http.createServer(async (request, response) => {
 
         writeJson(response, 400, {
             success: false,
-            message: "Configure this service as an HTTP proxy, for example curl --proxy http://host:port https://example.com",
+            message:
+                "Configure this service as an HTTP proxy, for example curl --proxy http://host:port https://example.com",
         });
         return;
     }

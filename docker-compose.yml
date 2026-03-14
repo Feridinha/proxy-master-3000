@@ -1,0 +1,13 @@
+services:
+  proxy-master-3000:
+    build: .
+    pull_policy: never
+    env_file:
+      - path: ./.env
+        required: false
+    container_name: proxy-master-3000
+    ports:
+      - ${PORT-3000}:${PORT-3000}
+    volumes:
+      - ./proxies.json:/app/proxies.json
+    restart: unless-stopped

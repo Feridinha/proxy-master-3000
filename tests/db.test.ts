@@ -9,6 +9,7 @@ import type { ProxyData } from "../src/db";
 
 type DbModule = typeof import("../src/db");
 
+const REPO_ROOT = path.resolve(import.meta.dir, "..");
 const DB_SOURCE_PATH = path.resolve(import.meta.dir, "../src/db.ts");
 const POSTHOG_SOURCE_PATH = path.resolve(import.meta.dir, "../src/posthog.ts");
 const ENV_SOURCE_PATH = path.resolve(import.meta.dir, "../src/myEnv.ts");
@@ -18,28 +19,24 @@ const withIsolatedDb = async (
         proxyLines,
         persistedProxies = {},
         env = {},
-        fetchImpl,
         randomImpl,
     }: {
         proxyLines: string[];
         persistedProxies?: Record<string, Partial<ProxyData>>;
         env?: Record<string, string>;
-        fetchImpl?: typeof fetch;
         randomImpl?: () => number;
     },
     run: (db: DbModule) => Promise<void>,
 ) => {
-    const tempDir = fs.mkdtempSync(
-        path.resolve(import.meta.dir, "../proxy-master-3000-test-"),
-    );
+    const tempDir = fs.mkdtempSync(path.join(REPO_ROOT, ".proxy-master-3000-test-"));
     const previousCwd = process.cwd();
     const tempDbPath = path.join(tempDir, "db-under-test.ts");
     const previousEnv = {
+        NODE_ENV: process.env.NODE_ENV,
         PORT: process.env.PORT,
         POSTHOG_KEY: process.env.POSTHOG_KEY,
         POSTHOG_HOST: process.env.POSTHOG_HOST,
     };
-    const originalFetch = globalThis.fetch;
     const originalRandom = Math.random;
 
     fs.writeFileSync(path.join(tempDir, "proxies.txt"), `${proxyLines.join("\n")}\n`);
@@ -51,16 +48,10 @@ const withIsolatedDb = async (
     fs.copyFileSync(POSTHOG_SOURCE_PATH, path.join(tempDir, "posthog.ts"));
     fs.copyFileSync(ENV_SOURCE_PATH, path.join(tempDir, "myEnv.ts"));
 
+    process.env.NODE_ENV = env.NODE_ENV ?? "test";
     process.env.PORT = env.PORT ?? "60888";
     process.env.POSTHOG_KEY = env.POSTHOG_KEY ?? "test-posthog-key";
     process.env.POSTHOG_HOST = env.POSTHOG_HOST ?? "https://us.posthog.com";
-    globalThis.fetch = fetchImpl ?? ((() => {
-        return Promise.resolve(
-            new Response(null, {
-                status: 200,
-            }),
-        );
-    }) as any as typeof fetch);
     Math.random = randomImpl ?? originalRandom;
 
     process.chdir(tempDir);
@@ -69,10 +60,10 @@ const withIsolatedDb = async (
         const db = await import(pathToFileURL(tempDbPath).href);
         await run(db);
     } finally {
+        process.env.NODE_ENV = previousEnv.NODE_ENV;
         process.env.PORT = previousEnv.PORT;
         process.env.POSTHOG_KEY = previousEnv.POSTHOG_KEY;
         process.env.POSTHOG_HOST = previousEnv.POSTHOG_HOST;
-        globalThis.fetch = originalFetch;
         Math.random = originalRandom;
         process.chdir(previousCwd);
         fs.rmSync(tempDir, { recursive: true, force: true });
@@ -165,68 +156,31 @@ describe("proxy score selection", () => {
         );
     });
 
-    test("reports success and error events to PostHog with proxy metrics", async () => {
+    test("updates proxy metrics with PostHog disabled during tests", async () => {
         const proxyId = "10.0.0.7:8000:user-g:pass-g";
-        const fetchCalls: Array<{
-            input: RequestInfo | URL;
-            init?: RequestInit;
-        }> = [];
-        const fetchMock = ((input: RequestInfo | URL, init?: RequestInit) => {
-            fetchCalls.push({ input, init });
-            return Promise.resolve(
-                new Response(null, {
-                    status: 200,
-                }),
-            );
-        }) as typeof fetch;
 
         await withIsolatedDb(
             {
                 proxyLines: [proxyId],
-                fetchImpl: fetchMock,
             },
             async ({ reportProxyStatus }) => {
-                reportProxyStatus(proxyId, "success");
-                reportProxyStatus(proxyId, "error");
+                const success = reportProxyStatus(proxyId, "success");
+                const error = reportProxyStatus(proxyId, "error");
+
+                expect(success).not.toBeNull();
+                expect(success?.score).toBe(100);
+                expect(success?.successCount).toBe(1);
+                expect(success?.failureCount).toBe(0);
+                expect(success?.consecutiveFailures).toBe(0);
+
+                expect(error).not.toBeNull();
+                expect(error?.score).toBe(35);
+                expect(error?.uptime).toBe(0.5);
+                expect(error?.successCount).toBe(1);
+                expect(error?.failureCount).toBe(1);
+                expect(error?.consecutiveFailures).toBe(1);
             },
         );
-
-        expect(fetchCalls).toHaveLength(2);
-
-        const [successCall, errorCall] = fetchCalls;
-        expect(String(successCall.input)).toBe("https://us.posthog.com/capture/");
-        expect(String(errorCall.input)).toBe("https://us.posthog.com/capture/");
-
-        const successBody = JSON.parse(String(successCall.init?.body)) as {
-            api_key: string;
-            event: string;
-            properties: Record<string, string | number | null>;
-        };
-        const errorBody = JSON.parse(String(errorCall.init?.body)) as {
-            api_key: string;
-            event: string;
-            properties: Record<string, string | number | null>;
-        };
-
-        expect(successBody.api_key).toBe("test-posthog-key");
-        expect(successBody.event).toBe("proxy_success");
-        expect(successBody.properties.distinct_id).toBe(proxyId);
-        expect(successBody.properties.proxyId).toBe(proxyId);
-        expect(successBody.properties.status).toBe("success");
-        expect(successBody.properties.score).toBe(100);
-        expect(successBody.properties.successCount).toBe(1);
-        expect(successBody.properties.failureCount).toBe(0);
-        expect(successBody.properties.consecutiveFailures).toBe(0);
-
-        expect(errorBody.api_key).toBe("test-posthog-key");
-        expect(errorBody.event).toBe("proxy_error");
-        expect(errorBody.properties.distinct_id).toBe(proxyId);
-        expect(errorBody.properties.proxyId).toBe(proxyId);
-        expect(errorBody.properties.status).toBe("error");
-        expect(errorBody.properties.score).toBe(35);
-        expect(errorBody.properties.successCount).toBe(1);
-        expect(errorBody.properties.failureCount).toBe(1);
-        expect(errorBody.properties.consecutiveFailures).toBe(1);
     });
 
     test("balanced strategy favors healthier proxies over 1000 requests", async () => {

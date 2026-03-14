@@ -1,9 +1,6 @@
 import type { ProxySelection } from "./db";
 
-import type {
-    IncomingMessage,
-    ServerResponse,
-} from "http";
+import type { IncomingMessage, ServerResponse } from "http";
 
 import * as http from "http";
 import * as net from "net";
@@ -60,7 +57,9 @@ export const buildForwardRawHeaders = (
     return filteredHeaders;
 };
 
-export const filterResponseRawHeaders = (response: IncomingMessage): string[] => {
+export const filterResponseRawHeaders = (
+    response: IncomingMessage,
+): string[] => {
     const filteredHeaders: string[] = [];
 
     for (let index = 0; index < response.rawHeaders.length; index += 2) {
@@ -102,7 +101,10 @@ export const forwardHttpRequestViaProxy = async (
     }
 
     const parsedTarget = new URL(targetUrl);
-    if (parsedTarget.protocol !== "http:" && parsedTarget.protocol !== "https:") {
+    if (
+        parsedTarget.protocol !== "http:" &&
+        parsedTarget.protocol !== "https:"
+    ) {
         throw new Error("Only http and https targets are supported");
     }
 
@@ -122,7 +124,9 @@ export const forwardHttpRequestViaProxy = async (
         });
 
         upstreamRequest.setTimeout(REQUEST_TIMEOUT_MS, () => {
-            upstreamRequest.destroy(new Error("Upstream proxy request timed out"));
+            upstreamRequest.destroy(
+                new Error("Upstream proxy request timed out"),
+            );
         });
 
         upstreamRequest.on("response", (upstreamResponse) => {
@@ -134,7 +138,10 @@ export const forwardHttpRequestViaProxy = async (
                 String(proxy.score),
             ];
 
-            clientResponse.writeHead(upstreamResponse.statusCode ?? 502, responseHeaders);
+            clientResponse.writeHead(
+                upstreamResponse.statusCode ?? 502,
+                responseHeaders,
+            );
             upstreamResponse.pipe(clientResponse);
             upstreamResponse.on("end", () => {
                 resolve(upstreamResponse.statusCode ?? 502);
@@ -186,7 +193,8 @@ export const createConnectTunnel = async (
         let buffer = Buffer.alloc(0);
 
         socket.on("data", (chunk) => {
-            const bufferChunk = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+            const bufferChunk =
+                typeof chunk === "string" ? Buffer.from(chunk) : chunk;
             buffer = Buffer.concat([buffer, bufferChunk]);
             const headerEnd = buffer.indexOf("\r\n\r\n");
 

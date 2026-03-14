@@ -84,13 +84,15 @@ const normalizeProxy = (key: string, value: Partial<ProxyData>): ProxyData => {
 
 const loadProxies = (): Record<string, ProxyData> => {
     try {
-        const raw = JSON.parse(fs.readFileSync(PROXIES_FILE, "utf-8")) as Record<
-            string,
-            Partial<ProxyData>
-        >;
+        const raw = JSON.parse(
+            fs.readFileSync(PROXIES_FILE, "utf-8"),
+        ) as Record<string, Partial<ProxyData>>;
 
         return Object.fromEntries(
-            Object.entries(raw).map(([key, value]) => [key, normalizeProxy(key, value)]),
+            Object.entries(raw).map(([key, value]) => [
+                key,
+                normalizeProxy(key, value),
+            ]),
         );
     } catch {
         return {};
@@ -108,7 +110,10 @@ const getCooldownMs = (proxy: ProxyData): number => {
         return 0;
     }
 
-    return Math.min(MAX_COOLDOWN_MS, 30_000 * 2 ** (proxy.consecutiveFailures - 2));
+    return Math.min(
+        MAX_COOLDOWN_MS,
+        30_000 * 2 ** (proxy.consecutiveFailures - 2),
+    );
 };
 
 const getCooldownUntil = (proxy: ProxyData): number | null => {
@@ -133,7 +138,9 @@ const pickWeightedProxy = (
     entries: Array<[string, ProxyData]>,
     now = Date.now(),
 ): [string, ProxyData] => {
-    const minRequests = Math.min(...entries.map(([, proxy]) => proxy.requestsCount));
+    const minRequests = Math.min(
+        ...entries.map(([, proxy]) => proxy.requestsCount),
+    );
 
     const weighted = entries.map(([id, proxy]) => {
         const reliabilityWeight = Math.max(0.05, proxy.score / 100);
@@ -192,7 +199,10 @@ const pickStableProxy = (
 
     const [, bestProxy] = sorted[0];
     const topTier = sorted.filter(([, proxy]) => {
-        return bestProxy.score - proxy.score <= 5 && bestProxy.uptime - proxy.uptime <= 0.05;
+        return (
+            bestProxy.score - proxy.score <= 5 &&
+            bestProxy.uptime - proxy.uptime <= 0.05
+        );
     });
 
     return topTier[0];
@@ -209,7 +219,9 @@ const toSelection = (id: string, proxy: ProxyData): ProxySelection => {
         failureCount: proxy.failureCount,
         requestsCount: proxy.requestsCount,
         consecutiveFailures: proxy.consecutiveFailures,
-        cooldownUntil: cooldownUntil ? new Date(cooldownUntil).toISOString() : null,
+        cooldownUntil: cooldownUntil
+            ? new Date(cooldownUntil).toISOString()
+            : null,
         conn: proxy.conn,
     };
 };
@@ -261,7 +273,9 @@ export const getProxy = (
     const available = entries.filter(([, proxy]) => !isCoolingDown(proxy, now));
     const pool = available.length > 0 ? available : entries;
     const [id, selected] =
-        strategy === "stable" ? pickStableProxy(pool) : pickWeightedProxy(pool, now);
+        strategy === "stable"
+            ? pickStableProxy(pool)
+            : pickWeightedProxy(pool, now);
 
     selected.requestsCount += 1;
     selected.lastUsedAt = new Date(now).toISOString();
