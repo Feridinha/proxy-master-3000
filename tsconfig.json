@@ -1,0 +1,10 @@
+{
+    "compilerOptions": {
+        "strict": true,
+        "strictNullChecks": true,
+        "noImplicitAny": true,
+        "module": "es2022",
+        "target": "es2022",
+        "moduleResolution": "bundler"
+    }
+}

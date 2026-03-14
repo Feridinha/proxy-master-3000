@@ -1,0 +1,5 @@
+.env
+proxies.json
+proxies.txt
+
+node_modules
